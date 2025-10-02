@@ -32,7 +32,7 @@ import plotly.express as px
 import plotly.io as pio
 pio.renderers.default = "plotly_mimetype+notebook"
 
-# from project import *
+from project import *
 
 grades_fp = Path('data') / 'grades.csv'
 grades = pd.read_csv(grades_fp)
