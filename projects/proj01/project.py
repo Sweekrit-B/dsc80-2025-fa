@@ -15,8 +15,11 @@ import plotly.express as px
 
 def get_assignment_names(grades):
     assignments = {}
+    # Iterate through every column
     for col in grades.columns:
+        # Get the first word in the assignment name to make comparison easier
         assignment_name = col.split()[0]
+        # If statement chain to sort columns into dictionary
         if 'checkpoint' in assignment_name.lower(): 
             general_area = 'checkpoint'
         elif 'lab' in assignment_name.lower():
@@ -34,9 +37,11 @@ def get_assignment_names(grades):
         else:
             continue
         
+        # If the item does not already exist in the dictionary...
         if general_area not in assignments:
             assignments[general_area] = [col]
         else:
+            # If the specific assignment is not already in the dictionary...
             if assignment_name not in assignments[general_area]:
                 assignments[general_area].append(col)
     return assignments
@@ -48,8 +53,10 @@ def get_assignment_names(grades):
 
 
 def projects_total(grades):
+    # Filter out project columns (ignoring checkpoints and lateness)
     projects = grades[[col for col in grades.columns if 'project' in col.lower() and 'checkpoint' not in col.lower() and 'lateness' not in col.lower()]]
     
+    # Define a function that determines the score for a single project on a per row basis
     def project_score(row):
         total_score = 0
         total_points = 0
@@ -60,6 +67,11 @@ def projects_total(grades):
                 total_score += row[col]
         return total_score / total_points
 
+    # Step 1: transpose the database so that projects are rows and students are columns
+    # Step 2: group by project name (and ignore the free response part of the name)
+    # Step 3: aggregate by applying the project_score function defined above
+    # Step 4: transpose back so that students are rows and projects are columns
+    # Step 5: fill NaNs with 0 (in case a student didn't do a project)
     per_project = projects.T.groupby(lambda x: x.split()[0].split('_')[0]).agg(project_score).T.fillna(0)
     return per_project.mean(axis=1)
 
@@ -69,7 +81,9 @@ def projects_total(grades):
 
 
 def lateness_penalty(col):
+    # Define a function to calculate lateness for students
     def penalty(val):
+        # Convert to pd.Timedelta to ensure easy comparison
         val = pd.to_timedelta(val)
         if val > pd.Timedelta(hours=2) and val <= pd.Timedelta(weeks=1):
             return 0.9
@@ -78,6 +92,7 @@ def lateness_penalty(col):
         elif val > pd.Timedelta(weeks=2):
             return 0.4
     
+    # Default value is 1 because if NA assume assignment is not late
     return col.apply(penalty).fillna(1)
 
 
@@ -87,8 +102,10 @@ def lateness_penalty(col):
 
 
 def process_labs(grades):
+    # Filter out lab columns
     labs = grades[[col for col in grades.columns if 'lab' in col.lower()]]
-
+    
+    # Redefine the penalty function inside the process_labs function
     def penalty(val):
         val = pd.to_timedelta(val)
         if val > pd.Timedelta(hours=2) and val <= pd.Timedelta(weeks=1):
@@ -97,7 +114,8 @@ def process_labs(grades):
             return 0.7
         elif val > pd.Timedelta(weeks=2):
             return 0.4
-
+        
+    # Define a function that determines the score for a single lab on a per row basis
     def lab_score(row):
         total_score = 0
         total_points = 0
@@ -112,6 +130,11 @@ def process_labs(grades):
                 total_score += row[col]
         return total_score / total_points * lateness_multiplier
 
+    # Step 1: transpose the database so that labs are rows and students are columns
+    # Step 2: group by lab name (and ignore the free response part of the name
+    # Step 3: aggregate by applying the lab_score function defined above
+    # Step 4: transpose back so that students are rows and labs are columns
+    # Step 5: fill NaNs with 0 (in case a student didn't do a lab)
     process_labs = labs.T.groupby(lambda x: x.split()[0]).agg(lab_score).T.fillna(0)
     return process_labs
 
@@ -123,6 +146,7 @@ def process_labs(grades):
 
 
 def lab_total(processed):
+    # Define a function that computes the lab total by dropping the lowest score
     def compute_score(row):
         return ((sum(row) - min(row)) / (len(row) - 1))
 
@@ -137,45 +161,30 @@ def lab_total(processed):
 
 
 def total_points(grades):
-    def checkpoints_discussions_exams(row):
-        ch_sum = 0
-        ch_total = 0
-        disc_sum = 0
-        disc_total = 0
+    
+    # Define a generalized function for finding the average score
+    def find_avg_score(row, value):
+        value_sum = 0
+        value_total = 0
 
-        midterm_sum = 0
-        midterm_total = 0
-        final_sum = 0
-        final_total = 0
         for col in row.index:
-            if 'checkpoint' in col.lower():
+            if value.lower() in col.lower():
                 if 'Lateness' not in col:
                     if 'Max Points' in col:
-                        ch_total += row[col]
+                        value_total += row[col]
                     else:
-                        ch_sum += row[col]
-            elif 'disc' in col.lower():
-                if 'Lateness' not in col:
-                    if 'Max Points' in col:
-                        disc_total += row[col]
-                    else:
-                        disc_sum += row[col]
-            elif 'midterm' in col.lower():
-                if 'Lateness' not in col:
-                    if 'Max Points' in col:
-                        midterm_total += row[col]
-                    else:
-                        midterm_sum += row[col]
-            elif 'final' in col.lower():
-                if 'Lateness' not in col:
-                    if 'Max Points' in col:
-                        final_total += row[col]
-                    else:
-                        final_sum += row[col]
-        return 0.025 * (ch_sum / ch_total) + 0.025 * (disc_sum / disc_total) + 0.15 * (midterm_sum / midterm_total) + 0.30 * (final_sum / final_total)
+                        value_sum += row[col]
+        
+        return value_sum / value_total
+    
+    # Apply that generalized function along the columns of the dataset and fill missing values with 0s
+    checkpoints = grades.apply(lambda x: find_avg_score(x, 'checkpoint'), axis=1).fillna(0)
+    discussions = grades.apply(lambda x: find_avg_score(x, 'discussion'), axis=1).fillna(0)
+    midterms = grades.apply(lambda x: find_avg_score(x, 'midterm'), axis=1).fillna(0)
+    finals = grades.apply(lambda x: find_avg_score(x, 'final'), axis=1).fillna(0)
 
-    checkpoints_discussions_exams = grades.apply(checkpoints_discussions_exams, axis=1).fillna(0)
-    return projects_total(grades) * 0.3 + lab_total(process_labs(grades)) * 0.2 + checkpoints_discussions_exams
+    # Return everyone's weighted scores
+    return 0.025 * checkpoints + 0.025 * discussions + 0.15 * midterms + 0.3 * finals + projects_total(grades) * 0.3 + lab_total(process_labs(grades)) * 0.2
 
 
 # ---------------------------------------------------------------------
@@ -184,6 +193,7 @@ def total_points(grades):
 
 
 def final_grades(total):
+    # Define a function that converts a numeric score to a letter grade
     def letter_grade(val):
         if val >= 0.9:
             return 'A'
@@ -199,6 +209,7 @@ def final_grades(total):
     return total.apply(letter_grade)
 
 def letter_proportions(total):
+    # Apply that function to the total Series and return a Series of normalized value counts
     letters = final_grades(total).value_counts(normalize=True)
     print(letters)
     return letters
