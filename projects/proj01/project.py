@@ -163,27 +163,29 @@ def lab_total(processed):
 
 
 def total_points(grades):
-    
-    # Define a generalized function for finding the average score
-    def find_avg_score(row, value):
-        value_sum = 0
-        value_total = 0
-
+    def avg_score(row):
+        total_score = 0
+        total_points = 0
         for col in row.index:
-            if value.lower() in col.lower():
-                if 'Lateness' not in col:
-                    if 'Max Points' in col:
-                        value_total += row[col]
-                    else:
-                        value_sum += row[col]
-        
-        return value_sum / value_total
+            if 'Max Points' in col:
+                total_points += row[col]
+            else:
+                total_score += row[col]
+        return total_score / total_points
+
+    def grab_cols(value):
+        value_cols = grades[[col for col in grades.columns if value in col.lower() and 'lateness' not in col.lower()]]
+        return value_cols
+
+    def mean_score_series(df):
+        per_score = df.T.groupby(lambda x: x.split()[0]).agg(avg_score).T.fillna(0)
+        return per_score.mean(axis=1)
     
     # Apply that generalized function along the columns of the dataset and fill missing values with 0s
-    checkpoints = grades.apply(lambda x: find_avg_score(x, 'checkpoint'), axis=1).fillna(0)
-    discussions = grades.apply(lambda x: find_avg_score(x, 'discussion'), axis=1).fillna(0)
-    midterms = grades.apply(lambda x: find_avg_score(x, 'midterm'), axis=1).fillna(0)
-    finals = grades.apply(lambda x: find_avg_score(x, 'final'), axis=1).fillna(0)
+    checkpoints = mean_score_series(grab_cols('checkpoint'))
+    discussions = mean_score_series(grab_cols('discussion'))
+    midterms = mean_score_series(grab_cols('midterm'))
+    finals = mean_score_series(grab_cols('final'))
 
     # Return everyone's weighted scores
     return 0.025 * checkpoints + 0.025 * discussions + 0.15 * midterms + 0.3 * finals + projects_total(grades) * 0.3 + lab_total(process_labs(grades)) * 0.2
@@ -213,7 +215,6 @@ def final_grades(total):
 def letter_proportions(total):
     # Apply that function to the total Series and return a Series of normalized value counts
     letters = final_grades(total).value_counts(normalize=True)
-    print(letters)
     return letters
 
 
