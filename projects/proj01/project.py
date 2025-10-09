@@ -128,7 +128,9 @@ def process_labs(grades):
                 lateness_multipler = penalty(time) if penalty(time) else 1
             else: # it's a score column
                 total_score += row[col]
-        return total_score / total_points * lateness_multiplier
+        score = total_score / total_points
+        changed_score = score * lateness_multipler
+        return changed_score
 
     # Step 1: transpose the database so that labs are rows and students are columns
     # Step 2: group by lab name (and ignore the free response part of the name
