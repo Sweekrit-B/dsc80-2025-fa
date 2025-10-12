@@ -25,6 +25,8 @@ def get_assignment_names(grades):
         elif 'lab' in assignment_name.lower():
             general_area = 'lab'
         elif 'project' in assignment_name.lower():
+            if 'free_response' in assignment_name.lower():
+                continue
             general_area = 'project'
         elif 'midterm' in assignment_name.lower():
             general_area = 'midterm'
@@ -152,10 +154,7 @@ def lab_total(processed):
     def compute_score(row):
         return ((sum(row) - min(row)) / (len(row) - 1))
 
-    return processed.apply(compute_score, axis=1).fillna(0)
-                                                                               
-
-
+    return processed.apply(compute_score, axis=1).fillna(0)                                                                          
 
 # ---------------------------------------------------------------------
 # QUESTION 6
