@@ -173,7 +173,7 @@ def total_points(grades):
         return total_score / total_points
 
     def grab_cols(value):
-        value_cols = grades[[col for col in grades.columns if value in col.lower() and 'lateness' not in col.lower()]]
+        value_cols = grades[[col for col in grades.columns if value in col.lower() and 'lateness' not in col.lower() and 'Redemption' not in col.lower()]]
         return value_cols
 
     def mean_score_series(df):
@@ -223,10 +223,18 @@ def letter_proportions(total):
 
 
 def raw_redemption(final_breakdown, question_numbers):
-    ...
+    total = 0
+    raw_redemption = pd.Series(0, index=final_breakdown.index)
+    for i in question_numbers:
+        total += float(final_breakdown.columns[i].split('(')[1].split()[0])
+        raw_redemption += final_breakdown.iloc[:, i]
+    
+    raw_redemption_scores = final_breakdown[['PID']]
+    raw_redemption_scores['Raw Redemption Score'] = raw_redemption / total
+    return raw_redemption_scores
     
 def combine_grades(grades, raw_redemption_scores):
-    ...
+    return grades.merge(raw_redemption_scores, on='PID')
 
 
 # ---------------------------------------------------------------------
@@ -235,10 +243,21 @@ def combine_grades(grades, raw_redemption_scores):
 
 
 def z_score(ser):
-    ...
+    return (ser - ser.mean()) / ser.std()
     
 def add_post_redemption(grades_combined):
-    ...
+
+    def reverse_z_score(z_scores, ser):
+        return z_scores * ser.std() + ser.mean()
+
+    z_score_redemption = z_score(grades_combined['Raw Redemption Score'])
+    grades_combined['Midterm Score Pre-Redemption'] = grades_combined['Midterm'] / grades_combined['Midterm - Max Points']
+    z_score_midterm = z_score(grades_combined['Midterm Score Pre-Redemption'])
+    z_score_max = pd.Series(np.maximum(z_score_redemption, z_score_midterm), index=grades_combined.index)
+    grades_combined['Midterm Score Post-Redemption'] = reverse_z_score(z_score_max, grades_combined['Midterm Score Pre-Redemption']).clip(upper=1)
+
+    return grades_combined
+
 
 
 # ---------------------------------------------------------------------
@@ -247,11 +266,17 @@ def add_post_redemption(grades_combined):
 
 
 def total_points_post_redemption(grades_combined):
-    ...
+    initial_grade = total_points(grades_combined)
+    initial_midterms = grades_combined['Midterm Score Pre-Redemption']
+    grades_minus_midterm = initial_grade - initial_midterms * 0.15
+    final_scores = grades_minus_midterm + grades_combined['Midterm Score Post-Redemption'] * 0.15
+    return final_scores
         
 def proportion_improved(grades_combined):
-    ...
-
+    initial_grade = total_points(grades_combined)
+    grade_after_redemption = total_points_post_redemption(grades_combined)
+    num_improved = (grade_after_redemption > initial_grade).value_counts()[True]
+    return num_improved / grades_combined.shape[0]
 
 # ---------------------------------------------------------------------
 # QUESTION 11
@@ -272,11 +297,6 @@ def top_sections(grades_analysis, t, n):
 
 def rank_by_section(grades_analysis):
     ...
-
-
-
-
-
 
 
 # ---------------------------------------------------------------------
