@@ -287,12 +287,29 @@ def total_points_post_redemption(grades_combined):
     return final_scores
         
 def proportion_improved(grades_combined):
+    # Define the function for finding the letter grade
+    def letter_grade(val):
+        if val >= 0.9:
+            return 'A'
+        elif val >= 0.8:
+            return 'B'
+        elif val >= 0.7:
+            return 'C'
+        elif val >= 0.6:
+            return 'D'
+        else:
+            return 'F'
+    
+    # Define a mapping for efficient grade checking
+    grade_order = {'A': 5, 'B': 4, 'C': 3, 'D': 2, 'F': 1}
     # Find grades for students without redemption
     initial_grade = total_points(grades_combined)
+    initial_letter_grade = initial_grade.apply(letter_grade).map(grade_order)
     # Find grades for students with redemption
     grade_after_redemption = total_points_post_redemption(grades_combined)
+    final_letter_grade = grade_after_redemption.apply(letter_grade).map(grade_order)
     # Find the number of students for which their grade after redemption was better than their grade before redemption
-    num_improved = (grade_after_redemption > initial_grade).sum()
+    num_improved = (final_letter_grade > initial_letter_grade).sum()
     # Find the ratio of the number that improved divided by the number of students
     return num_improved / grades_combined.shape[0]
 
