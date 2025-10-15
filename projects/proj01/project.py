@@ -173,7 +173,7 @@ def total_points(grades):
         return total_score / total_points
 
     def grab_cols(value):
-        value_cols = grades[[col for col in grades.columns if value in col.lower() and 'lateness' not in col.lower() and 'Redemption' not in col.lower()]]
+        value_cols = grades[[col for col in grades.columns if value in col.lower() and 'lateness' not in col.lower() and 'redemption' not in col.lower()]]
         return value_cols
 
     def mean_score_series(df):
@@ -183,8 +183,8 @@ def total_points(grades):
     # Apply that generalized function along the columns of the dataset and fill missing values with 0s
     checkpoints = mean_score_series(grab_cols('checkpoint'))
     discussions = mean_score_series(grab_cols('discussion'))
-    midterms = mean_score_series(grab_cols('midterm'))
-    finals = mean_score_series(grab_cols('final'))
+    midterms = (grades['Midterm'] / grades['Midterm - Max Points']).fillna(0)
+    finals = (grades['Final'] / grades['Final - Max Points']).fillna(0)
 
     # Return everyone's weighted scores
     return 0.025 * checkpoints + 0.025 * discussions + 0.15 * midterms + 0.3 * finals + projects_total(grades) * 0.3 + lab_total(process_labs(grades)) * 0.2
@@ -223,17 +223,20 @@ def letter_proportions(total):
 
 
 def raw_redemption(final_breakdown, question_numbers):
-    total = 0
-    raw_redemption = pd.Series(0, index=final_breakdown.index)
-    for i in question_numbers:
-        total += float(final_breakdown.columns[i].split('(')[1].split()[0])
-        raw_redemption += final_breakdown.iloc[:, i]
-    
-    raw_redemption_scores = final_breakdown[['PID']]
-    raw_redemption_scores['Raw Redemption Score'] = raw_redemption / total
+    # Grab the total from the column names of the final breakdown dataframe
+    total = sum(float(final_breakdown.columns[i].split('(')[1].split()[0]) for i in question_numbers)
+    # Calculate the earned points by:
+    #   1) selecting appropriate columns using the question_numbers list provided
+    #   2) summing the values along the 1st axis 
+    earned_points = final_breakdown.iloc[:, question_numbers].sum(axis=1)
+    # Grab the PID as a dataframe from the final_breakdown columns
+    raw_redemption_scores = final_breakdown[['PID']].copy()
+    # Fill in the raw redemption scores and fill the NA values with 0
+    raw_redemption_scores['Raw Redemption Score'] = (earned_points / total).fillna(0)
     return raw_redemption_scores
     
 def combine_grades(grades, raw_redemption_scores):
+    # Merge these redemption scores with the PID
     return grades.merge(raw_redemption_scores, on='PID')
 
 
@@ -243,19 +246,26 @@ def combine_grades(grades, raw_redemption_scores):
 
 
 def z_score(ser):
-    return (ser - ser.mean()) / ser.std()
+    return (ser - ser.mean()) / ser.std(ddof=0)
     
 def add_post_redemption(grades_combined):
 
     def reverse_z_score(z_scores, ser):
-        return z_scores * ser.std() + ser.mean()
+        # Reverse z-score function to get score based on z-score
+        return z_scores * ser.std(ddof=0) + ser.mean()
+    
+    redemption_scores = grades_combined['Raw Redemption Score']
+    midterm_scores = grades_combined['Midterm'].fillna(0) / grades_combined['Midterm - Max Points']
 
-    z_score_redemption = z_score(grades_combined['Raw Redemption Score'])
-    grades_combined['Midterm Score Pre-Redemption'] = grades_combined['Midterm'] / grades_combined['Midterm - Max Points']
-    z_score_midterm = z_score(grades_combined['Midterm Score Pre-Redemption'])
-    z_score_max = pd.Series(np.maximum(z_score_redemption, z_score_midterm), index=grades_combined.index)
-    grades_combined['Midterm Score Post-Redemption'] = reverse_z_score(z_score_max, grades_combined['Midterm Score Pre-Redemption']).clip(upper=1)
-
+    grades_combined['Midterm Score Pre-Redemption'] = midterm_scores
+    # Calculate the z score of the student's raw redemption score
+    z_score_redemption = z_score(redemption_scores)
+    # Calculate the z score of the student's pre-redemption score
+    z_score_midterm = z_score(midterm_scores)
+    # Determine the maximum of the two z scores
+    z_score_max = pd.Series(np.maximum(z_score_redemption, z_score_midterm))
+    # Calculate the new test score using the reverse z-score calculation
+    grades_combined['Midterm Score Post-Redemption'] = reverse_z_score(z_score_max, midterm_scores).clip(upper=1)
     return grades_combined
 
 
@@ -266,16 +276,24 @@ def add_post_redemption(grades_combined):
 
 
 def total_points_post_redemption(grades_combined):
+    # Calculate the initial grade using the previious total_points function
     initial_grade = total_points(grades_combined)
+    # Find the pre-redemption midterm scores using the combined grades dataset
     initial_midterms = grades_combined['Midterm Score Pre-Redemption']
+    # Find the initial grade minus the midterm scores
     grades_minus_midterm = initial_grade - initial_midterms * 0.15
+    # Calculate final scores based on post-redemption midterm scores
     final_scores = grades_minus_midterm + grades_combined['Midterm Score Post-Redemption'] * 0.15
     return final_scores
         
 def proportion_improved(grades_combined):
+    # Find grades for students without redemption
     initial_grade = total_points(grades_combined)
+    # Find grades for students with redemption
     grade_after_redemption = total_points_post_redemption(grades_combined)
-    num_improved = (grade_after_redemption > initial_grade).value_counts()[True]
+    # Find the number of students for which their grade after redemption was better than their grade before redemption
+    num_improved = (grade_after_redemption > initial_grade).sum()
+    # Find the ratio of the number that improved divided by the number of students
     return num_improved / grades_combined.shape[0]
 
 # ---------------------------------------------------------------------
@@ -284,10 +302,37 @@ def proportion_improved(grades_combined):
 
 
 def section_most_improved(grades_analysis):
-    ...
+    # Define a function that determines if each individual student saw an increase in their letter grade
+    def increase_in_letter_grade(row):
+        grades = ['A', 'B', 'C', 'D', 'F']
+        pre_redemption_letter_index = grades.index(row['Letter Grade Pre-Redemption'])
+        post_redemption_letter_index = grades.index(row['Letter Grade Post-Redemption'])
+        return post_redemption_letter_index < pre_redemption_letter_index
+    
+    # Create a copy for grades analysis
+    grades_analysis_copy = grades_analysis.copy()
+    # Use .apply on axis=1 to determine if the student improved
+    grades_analysis_copy['Letter Grade Improved'] = grades_analysis_copy[['Letter Grade Pre-Redemption', 'Letter Grade Post-Redemption']].apply(increase_in_letter_grade, axis=1)
+    # Steps to find the most improved section:
+    #   1. Group by the section
+    #   2. Grab the "Letter Grade Improved" column and find the mean
+    #   3. Sort the values and grab the top indexed value
+    return grades_analysis_copy.groupby('Section')['Letter Grade Improved'].mean().sort_values(ascending=False).index[0]
     
 def top_sections(grades_analysis, t, n):
-    ...
+    # Define a function to calculate the amount of students that meet the cutoff
+    def amt_of_cutoff_students(ser):
+        return (ser > t).sum()
+
+    # Create a copy for grade analysis
+    grades_analysis_copy = grades_analysis.copy()
+    # Calculate the final exam score as a new column
+    grades_analysis_copy['Final Exam Score'] = (grades_analysis_copy['Final'] / grades_analysis_copy['Final - Max Points']).fillna(0)
+    # Group by the section and aggregate by the amoount of students that met the cutoff
+    num_greater_than_cutoff = grades_analysis_copy.groupby('Section')['Final Exam Score'].agg(amt_of_cutoff_students)
+    # Return an np.array of sections where the amount of students that met the cutoff is greater than t
+    return np.array(num_greater_than_cutoff[num_greater_than_cutoff > t].index)
+
 
 
 # ---------------------------------------------------------------------
@@ -296,7 +341,20 @@ def top_sections(grades_analysis, t, n):
 
 
 def rank_by_section(grades_analysis):
-    ...
+    # Creates a copy of grades analysis
+    grades_analysis_copy = grades_analysis.copy()
+    # Determine the final exam score using the final and final max points
+    grades_analysis_copy['Final Exam Score'] = (grades_analysis_copy['Final'] / grades_analysis_copy['Final - Max Points']).fillna(0)
+    # Sorts values by section and then final exam score for order preservation later on
+    grades_analysis_copy = grades_analysis_copy.sort_values(['Section', 'Final Exam Score'], ascending=[True, False])
+    # Splits by section and creates a cumulative count -> adds 1 to start from 1 instead of 0
+    grades_analysis_copy['Section Rank'] = grades_analysis_copy.groupby('Section').cumcount() + 1
+    # Returns the pivot with the NA values filled with empty strings
+    return grades_analysis_copy.pivot(
+        index='Section Rank',
+        columns='Section',
+        values='PID',
+    ).fillna('')
 
 
 # ---------------------------------------------------------------------
@@ -305,4 +363,17 @@ def rank_by_section(grades_analysis):
 
 
 def letter_grade_heat_map(grades_analysis):
-    ...
+    # Use value counts to get letter grade proportions based on each section
+    letter_grades_per_section = grades_analysis.groupby('Section')['Letter Grade Post-Redemption'].value_counts(normalize=True).reset_index()
+    # Pivot the dataframe to get the columns as the section and the grade as the rows
+    letter_pivot = letter_grades_per_section.pivot(
+        index='Letter Grade Post-Redemption',
+        columns='Section',
+        values='proportion'
+    ).fillna(0)
+    # Reindex to follow grade order
+    grade_order = ['A', 'B', 'C', 'D', 'F']
+    letter_pivot = letter_pivot.reindex(grade_order)
+    # Create the heatmap
+    fig = px.imshow(letter_pivot, color_continuous_scale='Viridis_r', title='Distribution of Letter Grades by Section')
+    return fig

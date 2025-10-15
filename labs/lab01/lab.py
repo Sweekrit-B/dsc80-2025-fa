@@ -114,15 +114,9 @@ def where_square(A):
 
 
 def filter_cutoff_loop(matrix, cutoff):
-    output_matrix = []
-    for i in range(len(matrix[0])): # iterate through each column
-        col_sum = 0 # initialize the sum for each column
-        for j in range(len(matrix)): # iterate through each row
-            col_sum += matrix[j, i] # add each element into the column sum
-        if col_sum/len(matrix[0]) > cutoff: # if the mean of the column is greater than the cutoff
-            output_matrix.append(matrix[:, i]) # append the entire column as a numpy array to the output matrix
-    return np.array(output_matrix) # return the output matrix as a numpy array
-        
+    means = np.mean(matrix, axis=0)
+    cols_to_keep = means > cutoff
+    return matrix[:, cols_to_keep]
 
 
 # ---------------------------------------------------------------------
