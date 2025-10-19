@@ -348,7 +348,7 @@ def top_sections(grades_analysis, t, n):
     # Group by the section and aggregate by the amoount of students that met the cutoff
     num_greater_than_cutoff = grades_analysis_copy.groupby('Section')['Final Exam Score'].agg(amt_of_cutoff_students)
     # Return an np.array of sections where the amount of students that met the cutoff is greater than t
-    return np.array(num_greater_than_cutoff[num_greater_than_cutoff > t].index)
+    return np.array(num_greater_than_cutoff[num_greater_than_cutoff > n].index)
 
 
 
