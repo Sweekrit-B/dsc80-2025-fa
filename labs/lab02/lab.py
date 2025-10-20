@@ -54,7 +54,7 @@ def most_common(df, N=10):
     # For each column in the dataframe...
     for col in df:
         # Get the N most common values using Series methods
-        most_common = df[col].value_counts()[:N]
+        most_common = df[col].value_counts().iloc[:N]
         # Add the indices + values and pad the remaining with np.nan
         final_df[col + '_values'] = list(most_common.index) + [np.nan] * max(0, (N - len(most_common)))
         final_df[col + '_counts'] = list(most_common.values) + [np.nan] * max(0, (N - len(most_common)))
@@ -110,19 +110,19 @@ def clean_universities(df):
     df_copy['national_rank_cleaned'] = df_copy['national_rank'].str.split(',').str[1].astype(int)
     df_copy['nation'] = df_copy['nation'].replace({'UK': 'United Kingdom', 'USA': 'United States', 'Czechia': 'Czech Republic'})
     df_copy = df_copy.drop(columns=['national_rank'])
-    df_copy['is_r1_public'] = (df_copy['control'] == 'Public') & (df_copy['city'] != np.nan) & (df['state'] != np.nan)
+    df_copy['is_r1_public'] = (df_copy['control'] == 'Public') & df_copy['control'].notnull() & df_copy['city'].notnull() & df_copy['state'].notnull()
     return df_copy
 
 def university_info(cleaned):
     # 1. stat whose universities have the lowest mean score
-    states_grouped = cleaned['state'].value_counts()[lambda x: x > 3].index.tolist()
-    lowest_scoring_state = cleaned[cleaned['state'].isin(states_grouped)].groupby('state')['score'].mean().sort_values().index[0]
+    states_grouped = cleaned['state'].value_counts()[lambda x: x >= 3].index.tolist()
+    lowest_scoring_state = cleaned[cleaned['state'].isin(states_grouped)].groupby('state')['score'].mean().idxmin()
 
     # 2 proportion of institutions in the top 100 for which the quality of faculty ranking is also in the top 100
     prop_hq_faculty = cleaned[(cleaned['world_rank'] <= 100) & (cleaned['quality_of_faculty'] <= 100)].shape[0] / 100
 
     # 3 the number of states where at least 50% of the institutions are private
-    num_public_states = cleaned.groupby('state')['is_r1_public'].mean()[lambda x: x > 0.5].size
+    num_public_states = cleaned.groupby('state')['is_r1_public'].mean()[lambda x: x < 0.5].size
 
     # 4 the lowest ranked institution in the world that is the highest ranked university in its nation
     low_rank_num_1 = cleaned[cleaned['national_rank_cleaned'] == 1].sort_values(by='world_rank').iloc[-1]['institution']
