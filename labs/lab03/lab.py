@@ -42,14 +42,15 @@ def read_linkedin_survey(dirname):
 
 
 def com_stats(df):
+    df_copy = df.fillna('')
     # Proportion of people with 'Programmer' in their job title who went to a university with 'Ohio" in it
-    ohio_programmers = df[df['job title'].str.contains('Programmer') & df['university'].str.contains('Ohio')].shape[0] / df.shape[0]
+    ohio_programmers = df_copy[df_copy['job title'].str.contains('Programmer') & df_copy['university'].str.contains('Ohio')].shape[0] / df_copy.shape[0]
     # Number of job titles that end in 'Engineer'
-    engineer_job_titles = df[df['job title'].str.split().str[-1] == 'Engineer']['job title'].nunique()
+    engineer_job_titles = df_copy[df_copy['job title'].str.split().str[-1] == 'Engineer']['job title'].nunique()
     # Job title with the longest name
-    longest_name_job_titles = max(df['job title'].fillna('').unique(), key=len)
+    longest_name_job_titles = max(df_copy['job title'].fillna('').unique(), key=len)
     # Number of people with manager in their job title
-    manager_job_titles = df['job title'].str.lower().str.contains('manager').sum()
+    manager_job_titles = df_copy['job title'].str.lower().str.contains('manager').sum()
     return [ohio_programmers, engineer_job_titles, longest_name_job_titles, manager_job_titles]
 
 # ---------------------------------------------------------------------
