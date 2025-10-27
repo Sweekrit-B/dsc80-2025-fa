@@ -35,8 +35,16 @@ warnings.filterwarnings("ignore")
 
 
 def clean_loans(loans):
-    ...
-
+    def offset_date(row):
+        return row['issue_d'] + pd.DateOffset(months=row['term'])
+    
+    loans_copy = loans.copy()
+    loan_issue_ids = loans_copy['issue_d'].str.replace('-', ' ')
+    loans_copy['issue_d'] = pd.to_datetime(loan_issue_ids, format="%b %Y")
+    loans_copy['term'] = loans_copy['term'].str.split().str[0].astype(int)
+    loans_copy['emp_title'] = loans_copy['emp_title'].str.lower().str.strip().apply(lambda x: 'registered nurse' if x.lower() == 'rn' else x)
+    loans_copy['term_end'] = loans_copy.apply(offset_date, axis=1)
+    return loans_copy
 
 # ---------------------------------------------------------------------
 # QUESTION 2
@@ -45,7 +53,12 @@ def clean_loans(loans):
 
 
 def correlations(df, pairs):
-    ...
+    series = pd.Series()
+    for pair in pairs:
+        name = 'r_' + pair[0] + '_' + pair[1]
+        series[name] = df[pair[0]].corr(df[pair[1]])
+    return series
+
 
 
 

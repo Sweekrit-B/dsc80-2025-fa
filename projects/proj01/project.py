@@ -55,27 +55,23 @@ def get_assignment_names(grades):
 
 
 def projects_total(grades):
-    # Filter out project columns (ignoring checkpoints and lateness)
-    projects = grades[[col for col in grades.columns if 'project' in col.lower() and 'checkpoint' not in col.lower() and 'lateness' not in col.lower()]]
-    
-    # Define a function that determines the score for a single project on a per row basis
-    def project_score(row):
-        total_score = 0
-        total_points = 0
-        for col in row.index:
-            if 'Max Points' in col:
-                total_points += row[col]
-            else: # it's a score column
-                total_score += row[col]
-        return total_score / total_points
+    project_grades = pd.Series(0, index=grades.index, dtype=float)
 
-    # Step 1: transpose the database so that projects are rows and students are columns
-    # Step 2: group by project name (and ignore the free response part of the name)
-    # Step 3: aggregate by applying the project_score function defined above
-    # Step 4: transpose back so that students are rows and projects are columns
-    # Step 5: fill NaNs with 0 (in case a student didn't do a project)
-    per_project = projects.T.groupby(lambda x: x.split()[0].split('_')[0]).agg(project_score).T.fillna(0)
-    return per_project.mean(axis=1)
+    for project in get_assignment_names(grades)['project']:
+        points = grades[project].fillna(0)
+        max_points = grades[project + ' - Max Points'].fillna(1)
+
+        free_response = project + '_free_response'
+        free_response_max_points = free_response + ' - Max Points'
+
+        if free_response in grades.columns:
+            points += grades[free_response].fillna(0)
+            max_points += grades[free_response_max_points].fillna(1)
+        
+        project_grades += points / max_points
+    
+    return project_grades / len(get_assignment_names(grades)['project'])
+
 
 # ---------------------------------------------------------------------
 # QUESTION 3
@@ -104,43 +100,27 @@ def lateness_penalty(col):
 
 
 def process_labs(grades):
-    # Filter out lab columns
-    labs = grades[[col for col in grades.columns if 'lab' in col.lower()]]
-    
-    # Redefine the penalty function inside the process_labs function
-    def penalty(val):
-        val = pd.to_timedelta(val)
-        if val > pd.Timedelta(hours=2) and val <= pd.Timedelta(weeks=1):
-            return 0.9
-        elif val > pd.Timedelta(weeks=1) and val <= pd.Timedelta(weeks=2):
-            return 0.7
-        elif val > pd.Timedelta(weeks=2):
-            return 0.4
-        
-    # Define a function that determines the score for a single lab on a per row basis
-    def lab_score(row):
-        total_score = 0
-        total_points = 0
-        lateness_multiplier = 1
-        for col in row.index:
-            if 'Max Points' in col:
-                total_points += row[col]
-            elif 'Lateness' in col:
-                time = pd.to_timedelta(row[col])
-                lateness_multipler = penalty(time) if penalty(time) else 1
-            else: # it's a score column
-                total_score += row[col]
-        score = total_score / total_points
-        changed_score = score * lateness_multipler
-        return changed_score
+    # Define a dataframe to hold the processed lab grades
+    lab_grades = pd.DataFrame(index=grades.index)
+    # Iterate through each lab assignment from Q1
+    for lab in get_assignment_names(grades)['lab']:
+        # Fill in all missing values with 0s for points and 1s for max points
+        points = grades[lab].fillna(0)
+        max_points_col = lab + ' - Max Points'
+        max_points = grades[max_points_col].fillna(1)
+        # Calculate the raw score using points and max points
+        raw_score = points / max_points
 
-    # Step 1: transpose the database so that labs are rows and students are columns
-    # Step 2: group by lab name (and ignore the free response part of the name
-    # Step 3: aggregate by applying the lab_score function defined above
-    # Step 4: transpose back so that students are rows and labs are columns
-    # Step 5: fill NaNs with 0 (in case a student didn't do a lab)
-    process_labs = labs.T.groupby(lambda x: x.split()[0]).agg(lab_score).T.fillna(0)
-    return process_labs
+        # Grab the lateness column
+        lateness = grades[lab + ' - Lateness (H:M:S)']
+        # Calculate the penalty using the lateness column
+        penalty = lateness_penalty(lateness)
+        # Calculate the final score after applying the penalty
+        final_score = raw_score * penalty
+        # Fill in the lab grades dataframe with the final score
+        lab_grades[lab] = final_score
+    # Fill in any remaining stray missing values with 0
+    return lab_grades.fillna(0)
 
 
 
@@ -151,10 +131,7 @@ def process_labs(grades):
 
 def lab_total(processed):
     # Define a function that computes the lab total by dropping the lowest score
-    def compute_score(row):
-        return ((sum(row) - min(row)) / (len(row) - 1))
-
-    return processed.apply(compute_score, axis=1).fillna(0)                                                                          
+    return (processed.sum(axis = 1) - processed.min(axis = 1)) / (processed.shape[1] - 1)                                                                    
 
 # ---------------------------------------------------------------------
 # QUESTION 6
@@ -162,32 +139,34 @@ def lab_total(processed):
 
 
 def total_points(grades):
-    def avg_score(row):
-        total_score = 0
-        total_points = 0
-        for col in row.index:
-            if 'Max Points' in col:
-                total_points += row[col]
-            else:
-                total_score += row[col]
-        return total_score / total_points
-
-    def grab_cols(value):
-        value_cols = grades[[col for col in grades.columns if value in col.lower() and 'lateness' not in col.lower() and 'redemption' not in col.lower()]]
-        return value_cols
-
-    def mean_score_series(df):
-        per_score = df.T.groupby(lambda x: x.split()[0]).agg(avg_score).T.fillna(0)
-        return per_score.mean(axis=1)
+    # Define a function to compute the mean of assignments
+    def mean_assignments(grades, assignment):
+        # Get the relevant columns for the assignment type
+        cols = get_assignment_names(grades)[assignment]
+        # Create a dataframe to hold the divided scores (divided by assignment)
+        divided = pd.DataFrame()
+        # For each column...
+        for col in cols:
+            # Grab the column with the max points
+            max_points_col = col + ' - Max Points'
+            # Grab the column with the score and max points and fill missing values
+            scores = grades[col].fillna(0)
+            max_points = grades[max_points_col].fillna(1)
+            # Divide the scores by the max points and add to the divided dataframe
+            divided[col] = scores / max_points
+        # Return the divided dataframe for future use
+        return divided.mean(axis=1)
     
     # Apply that generalized function along the columns of the dataset and fill missing values with 0s
-    checkpoints = mean_score_series(grab_cols('checkpoint'))
-    discussions = mean_score_series(grab_cols('discussion'))
+    checkpoints = mean_assignments(grades, 'checkpoint').fillna(0)
+    discussions = mean_assignments(grades, 'disc').fillna(0)
+    labs = lab_total(process_labs(grades)).fillna(0)
+    projects = projects_total(grades).fillna(0)
     midterms = (grades['Midterm'] / grades['Midterm - Max Points']).fillna(0)
     finals = (grades['Final'] / grades['Final - Max Points']).fillna(0)
 
     # Return everyone's weighted scores
-    return 0.025 * checkpoints + 0.025 * discussions + 0.15 * midterms + 0.3 * finals + projects_total(grades) * 0.3 + lab_total(process_labs(grades)) * 0.2
+    return 0.2 * labs + 0.3 * projects + 0.15 * midterms + 0.3 * finals + 0.025 * discussions + 0.025 * checkpoints
 
 
 # ---------------------------------------------------------------------
@@ -237,7 +216,7 @@ def raw_redemption(final_breakdown, question_numbers):
     
 def combine_grades(grades, raw_redemption_scores):
     # Merge these redemption scores with the PID
-    return grades.merge(raw_redemption_scores, on='PID')
+    return grades.merge(raw_redemption_scores, on='PID', how='left').fillna(0)
 
 
 # ---------------------------------------------------------------------
@@ -249,7 +228,6 @@ def z_score(ser):
     return (ser - ser.mean()) / ser.std(ddof=0)
     
 def add_post_redemption(grades_combined):
-
     def reverse_z_score(z_scores, ser):
         # Reverse z-score function to get score based on z-score
         return z_scores * ser.std(ddof=0) + ser.mean()
@@ -280,10 +258,12 @@ def total_points_post_redemption(grades_combined):
     initial_grade = total_points(grades_combined)
     # Find the pre-redemption midterm scores using the combined grades dataset
     initial_midterms = grades_combined['Midterm Score Pre-Redemption']
-    # Find the initial grade minus the midterm scores
-    grades_minus_midterm = initial_grade - initial_midterms * 0.15
-    # Calculate final scores based on post-redemption midterm scores
-    final_scores = grades_minus_midterm + grades_combined['Midterm Score Post-Redemption'] * 0.15
+    # After redemption score
+    new_midterms = grades_combined['Midterm Score Post-Redemption']
+    # Midterm added points
+    midterm_add = (new_midterms - initial_midterms) * 0.15
+    # Find the new grade
+    final_scores = initial_grade + midterm_add
     return final_scores
         
 def proportion_improved(grades_combined):

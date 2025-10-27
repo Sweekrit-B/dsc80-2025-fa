@@ -44,13 +44,13 @@ def read_linkedin_survey(dirname):
 def com_stats(df):
     df_copy = df.fillna('')
     # Proportion of people with 'Programmer' in their job title who went to a university with 'Ohio" in it
-    ohio_programmers = df_copy[df_copy['job title'].str.contains('Programmer') & df_copy['university'].str.contains('Ohio')].shape[0] / df_copy.shape[0]
+    ohio_programmers = df_copy[df_copy['job title'].str.contains('Programmer') & df_copy['university'].str.contains('Ohio')].shape[0] / df_copy[df_copy['university'].str.contains('Ohio')].shape[0]
     # Number of job titles that end in 'Engineer'
     engineer_job_titles = df_copy[df_copy['job title'].str.split().str[-1] == 'Engineer']['job title'].nunique()
     # Job title with the longest name
     longest_name_job_titles = max(df_copy['job title'].fillna('').unique(), key=len)
     # Number of people with manager in their job title
-    manager_job_titles = df_copy['job title'].str.lower().str.contains('manager').sum()
+    manager_job_titles = int(df_copy['job title'].str.lower().str.contains('manager').sum())
     return [ohio_programmers, engineer_job_titles, longest_name_job_titles, manager_job_titles]
 
 # ---------------------------------------------------------------------
@@ -121,7 +121,7 @@ def pet_name_by_owner(owners, pets):
     # Set the index of the dataframe
     owners_and_pets_grouped = owners_and_pets_grouped.set_index('Owner Name')
     
-    return owners_and_pets_grouped
+    return owners_and_pets_grouped['Pet Name(s)']
 
 
 def total_cost_per_city(owners, pets, procedure_history, procedure_detail):
@@ -170,4 +170,4 @@ def total_by_month(sales):
     # Remap the month values
     sales_copy['Month'] = sales_copy['Month'].map(month_map)
     # Create the pivot table
-    return sales_copy.pivot_table(index=['Product', 'Name'], columns='Month', values='Total', aggfunc='sum').fillna(0)
+    return sales_copy.pivot_table(index=['Name', 'Product'], columns='Month', values='Total', aggfunc='sum').fillna(0)
