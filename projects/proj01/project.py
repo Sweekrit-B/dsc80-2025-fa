@@ -254,16 +254,12 @@ def add_post_redemption(grades_combined):
 
 
 def total_points_post_redemption(grades_combined):
+    # Add post redemption scores
+    grades_with_redemption = add_post_redemption(grades_combined) 
     # Calculate the initial grade using the previious total_points function
     initial_grade = total_points(grades_combined)
-    # Find the pre-redemption midterm scores using the combined grades dataset
-    initial_midterms = grades_combined['Midterm Score Pre-Redemption']
-    # After redemption score
-    new_midterms = grades_combined['Midterm Score Post-Redemption']
-    # Midterm added points
-    midterm_add = (new_midterms - initial_midterms) * 0.15
-    # Find the new grade
-    final_scores = initial_grade + midterm_add
+    # Calculate the final scores using the redemption adjusted midterm score
+    final_scores = initial_grade - grades_with_redemption['Midterm Score Pre-Redemption'] * 0.15 + grades_with_redemption['Midterm Score Post-Redemption'] * 0.15
     return final_scores
         
 def proportion_improved(grades_combined):
@@ -328,7 +324,7 @@ def top_sections(grades_analysis, t, n):
     # Group by the section and aggregate by the amoount of students that met the cutoff
     num_greater_than_cutoff = grades_analysis_copy.groupby('Section')['Final Exam Score'].agg(amt_of_cutoff_students)
     # Return an np.array of sections where the amount of students that met the cutoff is greater than t
-    return np.array(num_greater_than_cutoff[num_greater_than_cutoff > n].index)
+    return np.array(num_greater_than_cutoff[num_greater_than_cutoff >= n].index)
 
 
 
@@ -340,10 +336,8 @@ def top_sections(grades_analysis, t, n):
 def rank_by_section(grades_analysis):
     # Creates a copy of grades analysis
     grades_analysis_copy = grades_analysis.copy()
-    # Determine the final exam score using the final and final max points
-    grades_analysis_copy['Final Exam Score'] = (grades_analysis_copy['Final'] / grades_analysis_copy['Final - Max Points']).fillna(0)
     # Sorts values by section and then final exam score for order preservation later on
-    grades_analysis_copy = grades_analysis_copy.sort_values(['Section', 'Final Exam Score'], ascending=[True, False])
+    grades_analysis_copy = grades_analysis_copy.sort_values(['Section', 'Total Points Post-Redemption'], ascending=[True, False])
     # Splits by section and creates a cumulative count -> adds 1 to start from 1 instead of 0
     grades_analysis_copy['Section Rank'] = grades_analysis_copy.groupby('Section').cumcount() + 1
     # Returns the pivot with the NA values filled with empty strings

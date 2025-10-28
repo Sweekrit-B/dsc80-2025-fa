@@ -59,7 +59,7 @@ def count_frequency(login):
 
 
 def cookies_null_hypothesis():
-    return [3, 4]
+    return [2]
             
 def cookies_p_value(N):
     N_cookies = 250
@@ -77,7 +77,7 @@ def cookies_p_value(N):
 
 def car_null_hypothesis():
     # We expect the tires to be worse than claimed, so the null hypothesis should reflect the tires performing as claimed
-    return [3, 5]
+    return [1, 4]
 
 def car_alt_hypothesis():
     # We expect the tires to be worse than claimed, so the alternative hypothesis should reject the tires performing worse than claimed
@@ -96,7 +96,7 @@ def car_p_value():
 
 
 def superheroes_test_statistic():
-    return [1, 2]
+    return [1]
     
 def bhbe_col(heroes):
     # Define the boolean series for blond hair and blue eyes
