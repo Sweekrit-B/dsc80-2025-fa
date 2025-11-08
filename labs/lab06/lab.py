@@ -99,30 +99,6 @@ def scrape_books(k, categories):
 
 
 # ---------------------------------------------------------------------
-# QUESTION 3
-# ---------------------------------------------------------------------
-
-
-def stock_history(ticker, year, month):
-    api_key = 'lXc6qZucwcvy741kF1HA6w6mRqv2inOo'
-    base_url = 'https://financialmodelingprep.com/stable/historical-price-eod/full?symbol={ticker}&apikey={api_key}'
-    df = pd.DataFrame(requests.get(base_url).json())
-    df['date'] = pd.to_datetime(df['date'])
-    return df[(df['date'].dt.year == year) & (df['date'].dt.month == month)].sort_values('date')
-
-
-def stock_stats(history):
-    percent_change = (history.iloc[-1]['close'] - history.iloc[0]['open'])/(history.iloc[0]['open'])
-    if round(percent_change*100, 2) > 0:
-        percent_change = '+' + str(round(percent_change*100, 2)) + '%'
-    else:
-        percent_change = str(round(percent_change*100, 2)) + '%'
-    history['transaction_volume'] = history.apply(lambda df: (df['high'] + df['low'])/2 * df['volume'], axis=1)
-    total_transaction_volume = str(round(history['transaction_volume'].sum()/1_000_000_000, 2)) + 'B'
-    return (percent_change, total_transaction_volume)
-
-
-# ---------------------------------------------------------------------
 # QUESTION 4
 # ---------------------------------------------------------------------
 
