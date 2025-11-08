@@ -104,4 +104,68 @@ def scrape_books(k, categories):
 
 
 def get_comments(storyid):
-    ...
+    rows = []
+
+    def get_item(item_id):
+        url=f'https://hacker-news.firebaseio.com/v0/item/{item_id}.json'
+        return requests.get(url).json()
+
+    def add_to_df(parsed_json):
+        rows.append({
+            'id': parsed_json.get('id'),
+            'by': parsed_json.get('by'),
+            'text': parsed_json.get('text'),
+            'parent': parsed_json.get('parent'),
+            'time': parsed_json.get('time')
+        })
+
+    visited = set()
+    
+    # Method 1 for DFS - recursion
+    # def dfs(item_id):
+    #     if item_id in visited:
+    #         return
+    #     visited.add(item_id)
+
+    #     parsed_json = get_item(item_id)
+    #     if not parsed_json:
+    #         return
+    #     if parsed_json.get('dead'):
+    #         return 
+        
+    #     if parsed_json.get('type') == 'story':
+    #         for kid in parsed_json.get('kids', []):
+    #             dfs(kid)
+    #         return
+
+    #     add_to_df(parsed_json)
+        
+    #     for kid in parsed_json.get('kids', []):
+    #         dfs(kid)
+
+    # dfs(storyid)
+
+    # Method 2 for DFS - stack
+    stack = [storyid]
+    visited = set()
+    while stack:
+        curr = stack.pop()
+        if curr in visited:
+            continue
+        visited.add(curr)
+
+        parsed_json = get_item(curr)
+        if not parsed_json:
+            continue
+        if parsed_json.get('dead'):
+            continue
+        
+        if parsed_json.get('type') == 'story':
+            stack.extend(parsed_json.get('kids', [])[::-1])
+        else:
+            add_to_df(parsed_json)
+            stack.extend(parsed_json.get('kids', [])[::-1])
+    
+    df = pd.DataFrame(rows)
+    df['time'] = pd.to_datetime(df['time'], unit='s')
+    return df
