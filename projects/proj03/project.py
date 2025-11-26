@@ -15,6 +15,7 @@ import time
 
 
 def get_book(url):
+    time.sleep(0.5)  # to be polite to Project Gutenberg servers
     pure_text = requests.get(url).text
     start_marker = "*** START OF THE PROJECT GUTENBERG EBOOK"
     end_marker = "*** END OF THE PROJECT GUTENBERG EBOOK"
@@ -33,16 +34,13 @@ def get_book(url):
 
 
 def tokenize(book_string):
-    # add \x02 before paragraphs
-    book_string = re.sub(r'(?<=\n{2})(?=\S)', ' \x02 ', book_string)
-    # add \x03 after paragraphs
-    book_string = re.sub(r'(?<=\S)(?=\n{2})', ' \x03 ', book_string)
-    # remove all \n values that repeat more than twice
-    book_string = re.sub(r'\n{2,}', '', book_string)
-    # split based on spaces
-    tokens = book_string.replace("\n", " ").split()
-    if tokens[-1] != '\x03':
-        tokens.append('\x03')
+    START = '\x02'
+    END = '\x03'
+
+    s = re.sub(r'\n{2,}', f' {END} {START} ', book_string.strip())
+    s = f"{START} {s} {END}"
+
+    tokens = re.findall(r'\w+|\S', s)
     return tokens
 
 # ---------------------------------------------------------------------
